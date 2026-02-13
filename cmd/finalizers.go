@@ -32,6 +32,8 @@ func NewFinalizersPlugin() *cobra.Command {
 		SilenceUsage: true,
 		RunE: func(c *cobra.Command, args []string) error {
 
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 			restConfig, err := cFlags.ToRESTConfig()
 			if err != nil {
 				return err
@@ -52,14 +54,14 @@ func NewFinalizersPlugin() *cobra.Command {
 
 			var finalizersCh <-chan *find.ResourceIdentifier
 			if opt.ClusterScoped {
-				finalizersCh = finder.Find(context.Background(), resources, "")
+				finalizersCh = finder.Find(ctx, resources, "")
 			} else {
 				ns, _, err := cFlags.ToRawKubeConfigLoader().Namespace()
 				if err != nil {
 					return err
 				}
 
-				finalizersCh = finder.Find(context.Background(), resources, ns)
+				finalizersCh = finder.Find(ctx, resources, ns)
 			}
 
 			patcher, err := patch.New(restConfig)
@@ -67,7 +69,7 @@ func NewFinalizersPlugin() *cobra.Command {
 				return err
 			}
 
-			patcher.Patch(context.Background(), finalizersCh)
+			patcher.Patch(ctx, finalizersCh)
 
 			return nil
 		},

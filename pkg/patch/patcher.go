@@ -17,6 +17,7 @@ type patcher struct {
 	patchData []byte
 }
 
+// New creates a new instance of the patcher type
 func New(restConfig *rest.Config) (*patcher, error) {
 	dynamicCli, err := dynamic.NewForConfig(restConfig)
 	if err != nil {
@@ -29,7 +30,10 @@ func New(restConfig *rest.Config) (*patcher, error) {
 		},
 	}
 
-	patchBytes, _ := json.Marshal(patchData)
+	patchBytes, err := json.Marshal(patchData)
+	if err != nil {
+		return nil, err
+	}
 
 	return &patcher{
 		cli:       dynamicCli,
@@ -37,6 +41,8 @@ func New(restConfig *rest.Config) (*patcher, error) {
 	}, nil
 }
 
+// Patch reads from the provided channel. If it receives some resource, it asks
+// user for patching.
 func (p *patcher) Patch(ctx context.Context, ch <-chan *find.ResourceIdentifier) {
 	for r := range ch {
 		var confirm string
