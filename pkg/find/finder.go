@@ -2,6 +2,7 @@ package find
 
 import (
 	"context"
+	"runtime"
 	"sync"
 
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -30,53 +31,67 @@ func NewFinder(restConfig *rest.Config) (*Finder, error) {
 // Lister
 func (f *Finder) Find(ctx context.Context, gvrs map[schema.GroupVersionResource]struct{}, namespace string) <-chan *ResourceIdentifier {
 	finalizerCh := make(chan *ResourceIdentifier, len(gvrs))
+	gvrCh := make(chan schema.GroupVersionResource, len(gvrs))
 
 	go func() {
 		defer close(finalizerCh)
-		var wg sync.WaitGroup
-		wg.Add(len(gvrs))
-		for gvr := range gvrs {
-			go func(gvr schema.GroupVersionResource) {
-				defer wg.Done()
-				f.findFinalizers(ctx, gvr, finalizerCh, namespace)
-			}(gvr)
-		}
-		wg.Wait()
-	}()
 
+		var waitForWorkers sync.WaitGroup
+		workers := runtime.NumCPU() * 4
+		for w := range workers {
+			waitForWorkers.Add(1)
+			go func(id int) {
+				defer waitForWorkers.Done()
+				f.readResources(ctx, id, gvrCh, finalizerCh, namespace)
+			}(w)
+		}
+
+		for gvr := range gvrs {
+			gvrCh <- gvr
+		}
+		close(gvrCh)
+		waitForWorkers.Wait()
+	}()
 	return finalizerCh
 }
 
-func (f *Finder) findFinalizers(ctx context.Context, gvr schema.GroupVersionResource, ch chan<- *ResourceIdentifier, namespace string) {
-	getter := f.mdCli.Resource(gvr)
+// readResources reads from the channel for schema.GroupVersionResource. It lists
+// all the resources (for given GVR) and check the deletionTimestamp and finalizers attribute.
+// If some pending resource is found, it is paased to the channel for ResourceIdentifier
+func (f *Finder) readResources(ctx context.Context, workerID int, gvrCh <-chan schema.GroupVersionResource, ch chan<- *ResourceIdentifier, namespace string) {
+	for gvr := range gvrCh {
+		klog.V(6).InfoS("Worker ", "id", workerID, " started processing of resource", gvr)
+		getter := f.mdCli.Resource(gvr)
 
-	if namespace != "" {
-		getter.Namespace(namespace)
-	}
+		if namespace != "" {
+			getter.Namespace(namespace)
+		}
 
-	// TODO list with limit
-	l, err := getter.List(ctx, v1.ListOptions{})
-	if err != nil {
-		// TODO fix & propagate errors
-		return
-	}
+		// TODO list with limit
+		l, err := getter.List(ctx, v1.ListOptions{})
+		if err != nil {
+			// TODO fix & propagate errors
+			return
+		}
 
-	for i := range l.Items {
-		partMetadata := &l.Items[i]
+		for i := range l.Items {
+			partMetadata := &l.Items[i]
 
-		if partMetadata.DeletionTimestamp != nil && len(partMetadata.Finalizers) > 0 {
-			r := &ResourceIdentifier{
-				Name:                 partMetadata.Name,
-				Namespace:            partMetadata.Namespace,
-				GroupVersionResource: gvr,
-				Finalizers:           partMetadata.Finalizers,
-			}
-			klog.V(4).InfoS("Found pending:", "name", partMetadata.Name, "resource", "gvr", gvr, "finalizers", partMetadata.Finalizers)
-			select {
-			case ch <- r:
-			case <-ctx.Done():
-				return
+			if partMetadata.DeletionTimestamp != nil && len(partMetadata.Finalizers) > 0 {
+				r := &ResourceIdentifier{
+					Name:                 partMetadata.Name,
+					Namespace:            partMetadata.Namespace,
+					GroupVersionResource: gvr,
+					Finalizers:           partMetadata.Finalizers,
+				}
+				klog.V(4).InfoS("Found pending:", "name", partMetadata.Name, "resource", "gvr", gvr, "finalizers", partMetadata.Finalizers)
+				select {
+				case ch <- r:
+				case <-ctx.Done():
+					return
+				}
 			}
 		}
+		klog.V(6).InfoS("Worker ", "id", workerID, " finished processing of resource", gvr)
 	}
 }
