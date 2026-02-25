@@ -5,6 +5,7 @@ import (
 	"runtime"
 	"sync"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/metadata"
@@ -61,36 +62,51 @@ func (f *Finder) Find(ctx context.Context, gvrs map[schema.GroupVersionResource]
 func (f *Finder) readResources(ctx context.Context, workerID int, gvrCh <-chan schema.GroupVersionResource, ch chan<- *ResourceIdentifier, namespace string) {
 	for gvr := range gvrCh {
 		klog.V(6).InfoS("Worker ", "id", workerID, " started processing of resource", gvr)
-		getter := f.mdCli.Resource(gvr)
-
+		var getter metadata.ResourceInterface
 		if namespace != "" {
-			getter.Namespace(namespace)
+			getter = f.mdCli.Resource(gvr).Namespace(namespace)
+		} else {
+			getter = f.mdCli.Resource(gvr)
 		}
 
-		// TODO list with limit
-		l, err := getter.List(ctx, v1.ListOptions{})
-		if err != nil {
-			// TODO fix & propagate errors
-			return
+		listOpt := v1.ListOptions{
+			Continue: "",
+			Limit:    5,
 		}
 
-		for i := range l.Items {
-			partMetadata := &l.Items[i]
-
-			if partMetadata.DeletionTimestamp != nil && len(partMetadata.Finalizers) > 0 {
-				r := &ResourceIdentifier{
-					Name:                 partMetadata.Name,
-					Namespace:            partMetadata.Namespace,
-					GroupVersionResource: gvr,
-					Finalizers:           partMetadata.Finalizers,
+		for {
+			l, err := getter.List(ctx, listOpt)
+			if err != nil {
+				if errors.IsMethodNotSupported(err) {
+					break
 				}
-				klog.V(4).InfoS("Found pending:", "name", partMetadata.Name, "resource", "gvr", gvr, "finalizers", partMetadata.Finalizers)
-				select {
-				case ch <- r:
-				case <-ctx.Done():
-					return
+				klog.V(4).ErrorS(err, "Failed to list", "resource", gvr)
+				break
+			}
+
+			for i := range l.Items {
+				partMetadata := &l.Items[i]
+
+				if partMetadata.DeletionTimestamp != nil && len(partMetadata.Finalizers) > 0 {
+					r := &ResourceIdentifier{
+						Name:                 partMetadata.Name,
+						Namespace:            partMetadata.Namespace,
+						GroupVersionResource: gvr,
+						Finalizers:           partMetadata.Finalizers,
+					}
+					klog.V(4).InfoS("Found pending:", "name", partMetadata.Name, "resource", "gvr", gvr, "finalizers", partMetadata.Finalizers)
+					select {
+					case ch <- r:
+					case <-ctx.Done():
+						return
+					}
 				}
 			}
+
+			if l.Continue == "" {
+				break
+			}
+			listOpt.Continue = l.Continue
 		}
 		klog.V(6).InfoS("Worker ", "id", workerID, " finished processing of resource", gvr)
 	}

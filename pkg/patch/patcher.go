@@ -46,7 +46,7 @@ func New(restConfig *rest.Config) (*patcher, error) {
 func (p *patcher) Patch(ctx context.Context, ch <-chan *find.ResourceIdentifier) {
 	for r := range ch {
 		var confirm string
-		fmt.Printf("Found %s %s resource with %s finalizers. Do you want to remove the finalizers? [y/n] ", r.Name,
+		fmt.Printf("Found %s %s resource with %s finalizers. Do you want to remove the finalizers? [y/n] \n", r.Name,
 			r.GroupVersionResource.Resource, r.Finalizers)
 		fmt.Scan(&confirm)
 
