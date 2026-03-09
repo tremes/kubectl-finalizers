@@ -1,0 +1,4 @@
+# Added by goreleaser init:
+.vscode
+bin/
+dist/
