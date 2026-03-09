@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
+	"k8s.io/klog/v2"
 )
 
 type patcher struct {
@@ -44,7 +45,9 @@ func New(restConfig *rest.Config) (*patcher, error) {
 // Patch reads from the provided channel. If it receives some resource, it asks
 // user for patching.
 func (p *patcher) Patch(ctx context.Context, ch <-chan *find.ResourceIdentifier) {
+	found := false
 	for r := range ch {
+		found = true
 		var confirm string
 		fmt.Printf("Found %s %s resource with %s finalizers. Do you want to remove the finalizers? [y/n] \n", r.Name,
 			r.GroupVersionResource.Resource, r.Finalizers)
@@ -58,8 +61,10 @@ func (p *patcher) Patch(ctx context.Context, ch <-chan *find.ResourceIdentifier)
 			Namespace(r.Namespace).
 			Patch(ctx, r.Name, types.MergePatchType, p.patchData, v1.PatchOptions{})
 		if err != nil {
-			// TODO handler error
-			fmt.Println("ERROR patching ", err)
+			klog.ErrorS(err, "Failed to patch", "resource", r.Name, "group", r.Group)
 		}
+	}
+	if !found {
+		klog.InfoS("Not found any resources pending deletion")
 	}
 }
