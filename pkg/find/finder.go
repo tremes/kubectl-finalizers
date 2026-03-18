@@ -2,6 +2,7 @@ package find
 
 import (
 	"context"
+	"fmt"
 	"runtime"
 	"sync"
 
@@ -19,6 +20,9 @@ type Finder struct {
 
 // NewFinder
 func NewFinder(restConfig *rest.Config) (*Finder, error) {
+	if restConfig == nil {
+		return nil, fmt.Errorf("please provide a valid rest.Config")
+	}
 	mdClient, err := metadata.NewForConfig(restConfig)
 	if err != nil {
 		return nil, err
@@ -29,7 +33,8 @@ func NewFinder(restConfig *rest.Config) (*Finder, error) {
 	}, nil
 }
 
-// Lister
+// Find is non-blocking and spawns Go routines (leveraging worker pool) to asynchronously read
+// resources with every GVR. It returns a channel providing the resources found with the finalizers.
 func (f *Finder) Find(ctx context.Context, gvrs map[schema.GroupVersionResource]struct{}, namespace string) <-chan *ResourceIdentifier {
 	finalizerCh := make(chan *ResourceIdentifier, len(gvrs))
 	gvrCh := make(chan schema.GroupVersionResource, len(gvrs))
@@ -47,6 +52,7 @@ func (f *Finder) Find(ctx context.Context, gvrs map[schema.GroupVersionResource]
 			}(w)
 		}
 
+		// iterate of map of GVRs and pass each to be read
 		for gvr := range gvrs {
 			gvrCh <- gvr
 		}

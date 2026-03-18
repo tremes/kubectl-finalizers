@@ -8,3 +8,9 @@ build:     ## Builds the CLI
 	go build \
 	-ldflags "-w -X ${PACKAGE}/cmd.Version=${VERSION} -X ${PACKAGE}/cmd.Commit=${GIT} -X ${PACKAGE}/cmd.Date=${DATE}" \
     -a -o bin/${NAME} ./main.go
+
+test-unit:
+	go test -race -v ./...
+
+
+
