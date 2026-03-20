@@ -5,10 +5,7 @@ kubectl-finalizers identifies Kubernetes resources that are pending deletion (no
 
 Look at the short demonstration:
 
-<video width="640" height="480" controls>
-  <source src="./short-demo.mp4" type="video/mp4">
-  Your browser does not support the video tag. <a href="./short-demo.mp4">Download the demo video</a>
-</video>
+![Demo](./short-demo.gif)
 
 ## How to use
 
