@@ -14,7 +14,7 @@ import (
 )
 
 type patcher struct {
-	cli *dynamic.DynamicClient
+	cli dynamic.Interface
 }
 
 // New creates a new instance of the patcher type
@@ -44,12 +44,7 @@ func (p *patcher) Patch(ctx context.Context, ch <-chan *find.ResourceIdentifier)
 			continue
 		}
 
-		patchData, err := json.Marshal(map[string]interface{}{
-			"metadata": map[string]interface{}{
-				"resourceVersion": r.ResourceVersion,
-				"finalizers":      nil,
-			},
-		})
+		patchData, err := buildPatchData(r.ResourceVersion)
 		if err != nil {
 			klog.ErrorS(err, "Failed to build patch", "resource", r.Name)
 			continue
@@ -65,4 +60,13 @@ func (p *patcher) Patch(ctx context.Context, ch <-chan *find.ResourceIdentifier)
 	if !found {
 		fmt.Println("No resources pending deletion were found.")
 	}
+}
+
+func buildPatchData(resourceVersion string) ([]byte, error) {
+	return json.Marshal(map[string]interface{}{
+		"metadata": map[string]interface{}{
+			"resourceVersion": resourceVersion,
+			"finalizers":      nil,
+		},
+	})
 }
