@@ -63,6 +63,6 @@ func (p *patcher) Patch(ctx context.Context, ch <-chan *find.ResourceIdentifier)
 		}
 	}
 	if !found {
-		klog.InfoS("Not found any resources pending deletion")
+		fmt.Println("No resources pending deletion were found.")
 	}
 }
