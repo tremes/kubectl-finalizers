@@ -3,18 +3,20 @@ package discovery
 import (
 	"strings"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/cli-runtime/pkg/genericclioptions"
+	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 )
 
 type DiscoverAPI struct {
-	configFlags *genericclioptions.ConfigFlags
+	restConfig *rest.Config
 }
 
-func New(cFlags *genericclioptions.ConfigFlags) *DiscoverAPI {
+func New(restConfig *rest.Config) *DiscoverAPI {
 	return &DiscoverAPI{
-		configFlags: cFlags,
+		restConfig: restConfig,
 	}
 }
 
@@ -24,18 +26,22 @@ func (d *DiscoverAPI) Discover(clusterScopedOnly bool) (map[schema.GroupVersionR
 }
 
 func (d *DiscoverAPI) find(clusterScopedOnly bool) (map[schema.GroupVersionResource]struct{}, error) {
-	discovery, err := d.configFlags.ToDiscoveryClient()
+	discoveryClient, err := discovery.NewDiscoveryClientForConfig(d.restConfig)
 	if err != nil {
 		return nil, err
 	}
-	apiResourcesLists, err := discovery.ServerPreferredResources()
+	apiResourcesLists, err := discoveryClient.ServerPreferredResources()
 	if err != nil {
 		if len(apiResourcesLists) == 0 {
 			return nil, err
 		}
-		klog.V(4).ErrorS(err, "Failed to discover some API groups, continuing with partial results")
+		klog.ErrorS(err, "Failed to discover some API groups, continuing with partial results")
 	}
 
+	return filterResources(apiResourcesLists, clusterScopedOnly), nil
+}
+
+func filterResources(apiResourcesLists []*metav1.APIResourceList, clusterScopedOnly bool) map[schema.GroupVersionResource]struct{} {
 	result := make(map[schema.GroupVersionResource]struct{})
 
 	for _, apiResourceList := range apiResourcesLists {
@@ -72,5 +78,5 @@ func (d *DiscoverAPI) find(clusterScopedOnly bool) (map[schema.GroupVersionResou
 			}
 		}
 	}
-	return result, nil
+	return result
 }

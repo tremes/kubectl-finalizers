@@ -38,7 +38,7 @@ func NewFinalizersPlugin() *cobra.Command {
 			restConfig.QPS = -1
 			restConfig.Burst = -1
 
-			d := discovery.New(cFlags)
+			d := discovery.New(restConfig)
 			resources, err := d.Discover(opt.ClusterScoped)
 			if err != nil {
 				return err
