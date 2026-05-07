@@ -14,8 +14,7 @@ import (
 )
 
 type patcher struct {
-	cli       *dynamic.DynamicClient
-	patchData []byte
+	cli *dynamic.DynamicClient
 }
 
 // New creates a new instance of the patcher type
@@ -25,20 +24,8 @@ func New(restConfig *rest.Config) (*patcher, error) {
 		return nil, err
 	}
 
-	patchData := map[string]interface{}{
-		"metadata": map[string]interface{}{
-			"finalizers": []string{},
-		},
-	}
-
-	patchBytes, err := json.Marshal(patchData)
-	if err != nil {
-		return nil, err
-	}
-
 	return &patcher{
-		cli:       dynamicCli,
-		patchData: patchBytes,
+		cli: dynamicCli,
 	}, nil
 }
 
@@ -57,9 +44,20 @@ func (p *patcher) Patch(ctx context.Context, ch <-chan *find.ResourceIdentifier)
 			continue
 		}
 
-		_, err := p.cli.Resource(r.GroupVersionResource).
+		patchData, err := json.Marshal(map[string]interface{}{
+			"metadata": map[string]interface{}{
+				"resourceVersion": r.ResourceVersion,
+				"finalizers":      nil,
+			},
+		})
+		if err != nil {
+			klog.ErrorS(err, "Failed to build patch", "resource", r.Name)
+			continue
+		}
+
+		_, err = p.cli.Resource(r.GroupVersionResource).
 			Namespace(r.Namespace).
-			Patch(ctx, r.Name, types.MergePatchType, p.patchData, v1.PatchOptions{})
+			Patch(ctx, r.Name, types.MergePatchType, patchData, v1.PatchOptions{})
 		if err != nil {
 			klog.ErrorS(err, "Failed to patch", "resource", r.Name, "group", r.Group)
 		}

@@ -67,7 +67,7 @@ func (f *Finder) Find(ctx context.Context, gvrs map[schema.GroupVersionResource]
 // If some pending resource is found, it is paased to the channel for ResourceIdentifier
 func (f *Finder) readResources(ctx context.Context, workerID int, gvrCh <-chan schema.GroupVersionResource, ch chan<- *ResourceIdentifier, namespace string) {
 	for gvr := range gvrCh {
-		klog.V(6).InfoS("Worker ", "id", workerID, " started processing of resource", gvr)
+		klog.V(6).InfoS("Worker started processing resource", "id", workerID, "resource", gvr)
 		var getter metadata.ResourceInterface
 		if namespace != "" {
 			getter = f.mdCli.Resource(gvr).Namespace(namespace)
@@ -99,8 +99,9 @@ func (f *Finder) readResources(ctx context.Context, workerID int, gvrCh <-chan s
 						Namespace:            partMetadata.Namespace,
 						GroupVersionResource: gvr,
 						Finalizers:           partMetadata.Finalizers,
+						ResourceVersion:      partMetadata.ResourceVersion,
 					}
-					klog.V(4).InfoS("Found pending:", "name", partMetadata.Name, "resource", "gvr", gvr, "finalizers", partMetadata.Finalizers)
+					klog.V(4).InfoS("Found pending", "name", partMetadata.Name, "gvr", gvr, "finalizers", partMetadata.Finalizers)
 					select {
 					case ch <- r:
 					case <-ctx.Done():
@@ -114,6 +115,6 @@ func (f *Finder) readResources(ctx context.Context, workerID int, gvrCh <-chan s
 			}
 			listOpt.Continue = l.Continue
 		}
-		klog.V(6).InfoS("Worker ", "id", workerID, " finished processing of resource", gvr)
+		klog.V(6).InfoS("Worker finished processing resource", "id", workerID, "resource", gvr)
 	}
 }

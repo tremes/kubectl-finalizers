@@ -5,6 +5,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
+	"k8s.io/klog/v2"
 )
 
 type DiscoverAPI struct {
@@ -29,7 +30,10 @@ func (d *DiscoverAPI) find(clusterScopedOnly bool) (map[schema.GroupVersionResou
 	}
 	apiResourcesLists, err := discovery.ServerPreferredResources()
 	if err != nil {
-		return nil, err
+		if len(apiResourcesLists) == 0 {
+			return nil, err
+		}
+		klog.V(4).ErrorS(err, "Failed to discover some API groups, continuing with partial results")
 	}
 
 	result := make(map[schema.GroupVersionResource]struct{})

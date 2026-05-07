@@ -18,10 +18,6 @@ type options struct {
 	ClusterScoped bool
 }
 
-type FinalizersPlugin struct {
-	configFlags *genericclioptions.ConfigFlags
-}
-
 func NewFinalizersPlugin() *cobra.Command {
 	opt := options{}
 	cFlags := genericclioptions.NewConfigFlags(true)
@@ -44,6 +40,9 @@ func NewFinalizersPlugin() *cobra.Command {
 
 			d := discovery.New(cFlags)
 			resources, err := d.Discover(opt.ClusterScoped)
+			if err != nil {
+				return err
+			}
 
 			finder, err := find.NewFinder(restConfig)
 			if err != nil {

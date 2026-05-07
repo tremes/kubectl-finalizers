@@ -6,7 +6,8 @@ import "k8s.io/apimachinery/pkg/runtime/schema"
 // representing resource with some finalizers
 type ResourceIdentifier struct {
 	schema.GroupVersionResource
-	Name       string
-	Namespace  string
-	Finalizers []string
+	Name            string
+	Namespace       string
+	Finalizers      []string
+	ResourceVersion string
 }
