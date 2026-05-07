@@ -43,7 +43,7 @@ func (f *Finder) Find(ctx context.Context, gvrs map[schema.GroupVersionResource]
 		defer close(finalizerCh)
 
 		var waitForWorkers sync.WaitGroup
-		workers := runtime.NumCPU() * 4
+		workers := runtime.NumCPU() * 2
 		for w := range workers {
 			waitForWorkers.Add(1)
 			go func(id int) {
@@ -67,6 +67,11 @@ func (f *Finder) Find(ctx context.Context, gvrs map[schema.GroupVersionResource]
 // If some pending resource is found, it is paased to the channel for ResourceIdentifier
 func (f *Finder) readResources(ctx context.Context, workerID int, gvrCh <-chan schema.GroupVersionResource, ch chan<- *ResourceIdentifier, namespace string) {
 	for gvr := range gvrCh {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
 		klog.V(6).InfoS("Worker started processing resource", "id", workerID, "resource", gvr)
 		var getter metadata.ResourceInterface
 		if namespace != "" {
@@ -77,7 +82,7 @@ func (f *Finder) readResources(ctx context.Context, workerID int, gvrCh <-chan s
 
 		listOpt := v1.ListOptions{
 			Continue: "",
-			Limit:    5,
+			Limit:    100,
 		}
 
 		for {

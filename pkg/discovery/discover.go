@@ -45,7 +45,8 @@ func (d *DiscoverAPI) find(clusterScopedOnly bool) (map[schema.GroupVersionResou
 				continue
 			}
 
-			if strings.Contains(apiResource.Name, "/status") {
+			// filter all subresources - /status, pods/log
+			if strings.Contains(apiResource.Name, "/") {
 				continue
 			}
 			gvr := schema.GroupVersionResource{
