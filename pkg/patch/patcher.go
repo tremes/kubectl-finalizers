@@ -31,17 +31,22 @@ func New(restConfig *rest.Config) (*patcher, error) {
 
 // Patch reads from the provided channel. If it receives some resource, it asks
 // user for patching.
-func (p *patcher) Patch(ctx context.Context, ch <-chan *find.ResourceIdentifier) {
+func (p *patcher) Patch(ctx context.Context, ch <-chan *find.ResourceIdentifier, opts find.Options, namespace string) {
 	found := false
+
 	for r := range ch {
 		found = true
-		var confirm string
-		fmt.Printf("Found %s %s resource with %s finalizers. Do you want to remove the finalizers? [y/n] \n", r.Name,
-			r.GroupVersionResource.Resource, r.Finalizers)
-		fmt.Scan(&confirm)
 
-		if confirm != "y" {
-			continue
+		// if force option is used, do not ask user for confirmation
+		if !opts.ForcePatching {
+			var confirm string
+			fmt.Printf("Found %s %s resource with %s finalizers. Do you want to remove the finalizers? [y/n] \n", r.Name,
+				r.GroupVersionResource.Resource, r.Finalizers)
+			fmt.Scan(&confirm)
+
+			if confirm != "y" {
+				continue
+			}
 		}
 
 		patchData, err := buildPatchData(r.ResourceVersion)
@@ -56,9 +61,17 @@ func (p *patcher) Patch(ctx context.Context, ch <-chan *find.ResourceIdentifier)
 		if err != nil {
 			klog.ErrorS(err, "Failed to patch", "resource", r.Name, "group", r.Group)
 		}
+		if opts.ForcePatching {
+			fmt.Printf("Patched %s/%s\n", r.GroupVersionResource.GroupResource(), r.Name)
+		}
+
 	}
 	if !found {
-		fmt.Println("No resources pending deletion were found.")
+		if opts.ClusterScoped {
+			fmt.Println("No cluster-scoped resources pending deletion were found.")
+		} else {
+			fmt.Printf("No resources pending deletion were found in the %s namespace.\n", namespace)
+		}
 	}
 }
 

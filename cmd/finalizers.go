@@ -14,12 +14,8 @@ import (
 	"k8s.io/klog/v2"
 )
 
-type options struct {
-	ClusterScoped bool
-}
-
 func NewFinalizersPlugin() *cobra.Command {
-	opt := options{}
+	opt := find.Options{}
 	cFlags := genericclioptions.NewConfigFlags(true)
 	cmd := &cobra.Command{
 		Use:          "finalizers",
@@ -52,6 +48,7 @@ func NewFinalizersPlugin() *cobra.Command {
 			klog.V(4).InfoS("Found API resources", "resources", len(resources))
 
 			var finalizersCh <-chan *find.ResourceIdentifier
+			var namespace string
 			if opt.ClusterScoped {
 				finalizersCh = finder.Find(ctx, resources, "")
 			} else {
@@ -61,6 +58,7 @@ func NewFinalizersPlugin() *cobra.Command {
 				}
 
 				finalizersCh = finder.Find(ctx, resources, ns)
+				namespace = ns
 			}
 
 			patcher, err := patch.New(restConfig)
@@ -68,12 +66,13 @@ func NewFinalizersPlugin() *cobra.Command {
 				return err
 			}
 
-			patcher.Patch(ctx, finalizersCh)
+			patcher.Patch(ctx, finalizersCh, opt, namespace)
 
 			return nil
 		},
 	}
 	cmd.Flags().BoolVarP(&opt.ClusterScoped, "clusterscoped", "c", false, "Check only clusterscoped resources")
+	cmd.Flags().BoolVarP(&opt.ForcePatching, "force", "f", false, "Do not ask user and force patching the resources with finalizers")
 	cmd.Flags().AddGoFlagSet(flag.CommandLine)
 	cFlags.AddFlags(cmd.Flags())
 

@@ -2,7 +2,6 @@ package patch
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -86,7 +85,7 @@ func TestPatch_UserConfirmsYes(t *testing.T) {
 	os.Stdin = r
 	defer func() { os.Stdin = oldStdin }()
 
-	p.Patch(context.Background(), ch)
+	p.Patch(t.Context(), ch, find.Options{}, "")
 
 	if !patchCalled {
 		t.Error("expected patch to be called when user confirms with 'y'")
@@ -123,7 +122,7 @@ func TestPatch_UserDeclinesNo(t *testing.T) {
 	os.Stdin = r
 	defer func() { os.Stdin = oldStdin }()
 
-	p.Patch(context.Background(), ch)
+	p.Patch(t.Context(), ch, find.Options{}, "")
 
 	if patchCalled {
 		t.Error("patch should not be called when user declines with 'n'")
@@ -143,7 +142,7 @@ func TestPatch_EmptyChannel(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	p.Patch(context.Background(), ch)
+	p.Patch(t.Context(), ch, find.Options{}, "default")
 
 	w.Close()
 	os.Stdout = oldStdout
@@ -151,7 +150,34 @@ func TestPatch_EmptyChannel(t *testing.T) {
 	var buf bytes.Buffer
 	io.Copy(&buf, r)
 
-	expected := "No resources pending deletion were found.\n"
+	expected := "No resources pending deletion were found in the default namespace.\n"
+	if buf.String() != expected {
+		t.Errorf("expected output %q, got %q", expected, buf.String())
+	}
+}
+
+func TestPatch_EmptyChannelClusterScoped(t *testing.T) {
+	scheme := runtime.NewScheme()
+	fakeCli := dynamicfake.NewSimpleDynamicClient(scheme)
+
+	p := &patcher{cli: fakeCli}
+
+	ch := make(chan *find.ResourceIdentifier)
+	close(ch)
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	p.Patch(t.Context(), ch, find.Options{ClusterScoped: true}, "")
+
+	w.Close()
+	os.Stdout = oldStdout
+
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+
+	expected := "No cluster-scoped resources pending deletion were found.\n"
 	if buf.String() != expected {
 		t.Errorf("expected output %q, got %q", expected, buf.String())
 	}
